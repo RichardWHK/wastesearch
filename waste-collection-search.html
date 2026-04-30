@@ -601,37 +601,43 @@ function onAddressSelect() {
 }
 
 // ── Calendar logic ────────────────────────────────────────────────────────
+// Anchor dates for the 14-day fortnightly cycle (midnight NZT, use UTC noon to avoid DST shifts)
+const ANCHOR_WEEK1 = Date.UTC(2013, 9, 27, 12, 0, 0); // Oct 27 2013 – Week 1 Green Waste start
+const ANCHOR_WEEK2 = Date.UTC(2013, 9, 20, 12, 0, 0); // Oct 20 2013 – Week 2 Green Waste start
+const MS_PER_DAY = 86400000;
+
 function getCollectionType(date, record) {
   const dayIdx = DAY_IDX[record.CollectionDay];
   if (date.getDay() !== dayIdx) return null;
 
-  // Which occurrence of this weekday in the month? (1-indexed)
-  const d = date.getDate();
-  let count = 0;
-  for (let i = 1; i <= d; i++) {
-    const tmp = new Date(date.getFullYear(), date.getMonth(), i);
-    if (tmp.getDay() === dayIdx) count++;
+  // Rubbish-only zones: Week 0 PZone, or RURAL suburb (no green waste)
+  const isRural = record.Suburb === 'RURAL';
+  const isWeek0 = record.PZone === 'Week 0';
+
+  // Choose anchor based on PZone
+  // Week 1 properties use the Oct 27 anchor; Week 2 use Oct 20
+  const anchor = (record.PZone === 'Week 2') ? ANCHOR_WEEK2 : ANCHOR_WEEK1;
+
+  // Use noon UTC of the target date to safely straddle any DST boundary
+  const dateUtcNoon = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+  const dayDiff = Math.round((dateUtcNoon - anchor) / MS_PER_DAY);
+  const cycle = ((dayDiff % 14) + 14) % 14; // always 0–13, handles dates before anchor
+
+  // cycle 0–6  → Green Waste week (Cycle A)
+  // cycle 7–13 → Recycling week   (Cycle B)
+  const isCycleA = cycle < 7;
+
+  if (isWeek0) {
+    // Week 0 = rubbish every week, no alternating
+    return 'rubbish-only';
   }
 
-  const isOdd = (count % 2 === 1);
-  const noGreenWaste = record.Suburb === 'RURAL' || record.PZone === 'Week 0';
-
-  // Week 0 / RURAL = rubbish only, no green waste ever
-  if (noGreenWaste) {
-    if (record.PZone === 'Week 0') return 'rubbish-only';
-    // RURAL: recycling alternates, green waste replaced by rubbish-only
-    if (record.PZone === 'Week 1') return isOdd ? 'rubbish-only' : 'rubbish-recycling';
-    else                           return isOdd ? 'rubbish-recycling' : 'rubbish-only';
+  if (isRural) {
+    // Rural: recycling alternates normally, but green waste weeks become rubbish-only
+    return isCycleA ? 'rubbish-only' : 'rubbish-recycling';
   }
 
-  // Standard zones
-  // Week 1: odd = Rubbish + Green Waste, even = Rubbish + Recycling
-  // Week 2: odd = Rubbish + Recycling,   even = Rubbish + Green Waste
-  if (record.PZone === 'Week 1') {
-    return isOdd ? 'rubbish-green' : 'rubbish-recycling';
-  } else {
-    return isOdd ? 'rubbish-recycling' : 'rubbish-green';
-  }
+  return isCycleA ? 'rubbish-green' : 'rubbish-recycling';
 }
 
 function typeLabel(type) {
