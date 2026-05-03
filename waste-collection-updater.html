@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waste Collection Tool — Data Updater</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #00447c;
+    --navy-mid: #005799;
+    --blue-light: #e0edf8;
+    --green: #2e7d32;
+    --green-light: #e8f5e9;
+    --amber: #e65100;
+    --amber-light: #fff3e0;
+    --red: #c62828;
+    --red-light: #ffebee;
+    --border: #dde3ec;
+    --text: #00447c;
+    --text-muted: #6b7d96;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --radius: 10px;
+    --shadow: 0 2px 12px rgba(0,68,124,0.09);
+    --shadow-lg: 0 6px 28px rgba(0,68,124,0.13);
+    --font: -apple-system,"Calibri Light","Calibri","Helvetica Neue",Helvetica,Roboto,"Droid Sans",Arial,sans-serif;
+  }
+
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .wrap { max-width: 680px; margin: 0 auto; padding: 36px 20px 60px; }
+
+  .page-header { margin-bottom: 32px; }
+  .page-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); }
+  .page-header p  { margin-top: 6px; color: var(--text-muted); font-size: 0.93rem; line-height: 1.55; }
+
+  /* ── Steps ── */
+  .steps { display: flex; gap: 0; margin-bottom: 32px; }
+  .step {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    position: relative; font-size: 0.78rem; color: var(--text-muted); text-align: center;
+  }
+  .step:not(:last-child)::after {
+    content: ''; position: absolute; top: 16px; left: 50%; right: -50%;
+    height: 2px; background: var(--border); z-index: 0;
+  }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--border);
+    color: var(--text-muted); font-weight: 700; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; z-index: 1; margin-bottom: 6px; transition: background 0.2s, color 0.2s;
+  }
+  .step.active .step-num   { background: var(--navy); color: #fff; }
+  .step.done .step-num     { background: var(--green); color: #fff; }
+  .step.active .step-label { color: var(--navy); font-weight: 600; }
+  .step.done .step-label   { color: var(--green); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    border: 1px solid var(--border); box-shadow: var(--shadow);
+    padding: 28px; margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 1rem; font-weight: 700; color: var(--navy);
+    margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-sub { font-size: 0.87rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+
+  /* ── Drop zone ── */
+  .dropzone {
+    border: 2.5px dashed var(--border); border-radius: 10px;
+    padding: 40px 24px; text-align: center; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s; position: relative;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--navy); background: var(--blue-light);
+  }
+  .dropzone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .dropzone-icon { font-size: 2.5rem; margin-bottom: 10px; display: block; }
+  .dropzone-text { font-size: 1rem; font-weight: 600; color: var(--navy); }
+  .dropzone-hint { font-size: 0.82rem; color: var(--text-muted); margin-top: 5px; }
+
+  /* ── Column mapping ── */
+  .col-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .col-row { display: flex; flex-direction: column; gap: 5px; }
+  .col-label {
+    font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+  }
+  .col-label span { color: var(--red); }
+  .col-select {
+    height: 40px; padding: 0 12px; border: 1.5px solid var(--border);
+    border-radius: 7px; font-family: var(--font); font-size: 0.9rem;
+    color: var(--text); background: #fff; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7d96' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 30px; outline: none; transition: border-color 0.15s;
+  }
+  .col-select:focus { border-color: var(--navy); }
+  .col-select.ok  { border-color: var(--green); }
+  .col-select.err { border-color: var(--red); }
+
+  /* ── Preview table ── */
+  .preview-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th { background: var(--navy); color: #fff; padding: 8px 12px; text-align: left; font-weight: 600; white-space: nowrap; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f7f9fc; }
+
+  /* ── Validation ── */
+  .validation-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .val-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; line-height: 1.4;
+  }
+  .val-item.ok     { background: var(--green-light); color: var(--green); }
+  .val-item.warn   { background: var(--amber-light); color: var(--amber); }
+  .val-item.error  { background: var(--red-light);   color: var(--red); }
+  .val-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+  .val-text strong { font-weight: 700; display: block; }
+
+  /* ── Progress ── */
+  .progress-bar-wrap {
+    background: var(--border); border-radius: 20px; height: 8px; overflow: hidden; margin: 16px 0 8px;
+  }
+  .progress-bar {
+    height: 100%; background: var(--navy); border-radius: 20px;
+    transition: width 0.3s ease; width: 0%;
+  }
+  .progress-label { font-size: 0.83rem; color: var(--text-muted); text-align: center; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 46px; padding: 0 24px; border: none; border-radius: 8px;
+    font-family: var(--font); font-size: 0.97rem; font-weight: 600;
+    cursor: pointer; transition: background 0.15s, transform 0.1s; text-decoration: none;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-mid); }
+  .btn-primary:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; transform: none; }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-success:hover { background: #1b5e20; }
+  .btn-outline { background: #fff; color: var(--navy); border: 1.5px solid var(--border); }
+  .btn-outline:hover { background: var(--blue-light); border-color: var(--navy); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+  /* ── Success state ── */
+  .success-card {
+    background: var(--green-light); border: 1.5px solid #a5d6a7;
+    border-radius: var(--radius); padding: 24px 28px; text-align: center;
+  }
+  .success-icon { font-size: 3rem; margin-bottom: 10px; }
+  .success-card h2 { color: var(--green); font-size: 1.2rem; margin-bottom: 6px; }
+  .success-card p  { color: #388e3c; font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── Info box ── */
+  .info-box {
+    background: var(--blue-light); border: 1px solid #b3d4f0; border-radius: 8px;
+    padding: 14px 16px; font-size: 0.86rem; color: var(--navy); line-height: 1.5; margin-bottom: 16px;
+  }
+  .info-box strong { font-weight: 700; }
+
+  .hidden { display: none !important; }
+  .mt { margin-top: 20px; }
+
+  @media (max-width: 480px) {
+    .wrap { padding: 20px 12px 48px; }
+    .col-grid { grid-template-columns: 1fr; }
+    .steps .step-label { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-header">
+    <h1>Waste Collection Tool — Data Updater</h1>
+    <p>Upload your updated Excel spreadsheet to generate a new version of the public-facing waste collection search tool. No technical knowledge required.</p>
+  </div>
+
+  <!-- Steps indicator -->
+  <div class="steps" id="stepsBar">
+    <div class="step active" id="step-ind-1">
+      <div class="step-num">1</div>
+      <div class="step-label">Upload</div>
+    </div>
+    <div class="step" id="step-ind-2">
+      <div class="step-num">2</div>
+      <div class="step-label">Map columns</div>
+    </div>
+    <div class="step" id="step-ind-3">
+      <div class="step-num">3</div>
+      <div class="step-label">Validate</div>
+    </div>
+    <div class="step" id="step-ind-4">
+      <div class="step-num">4</div>
+      <div class="step-label">Download</div>
+    </div>
+  </div>
+
+  <!-- ── Step 1: Upload ── -->
+  <div id="panelUpload">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload Excel Spreadsheet
+      </div>
+      <div class="card-sub">Drop your .xlsx file here or click to browse. The file stays on your computer — nothing is uploaded to any server.</div>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <span class="dropzone-icon">📊</span>
+        <div class="dropzone-text">Drop .xlsx file here or click to browse</div>
+        <div class="dropzone-hint">Supports .xlsx and .xls formats</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 2: Column mapping ── -->
+  <div id="panelMapping" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Map Spreadsheet Columns
+      </div>
+      <div class="card-sub">Match each required field to the correct column in your spreadsheet. Required fields are marked <span style="color:var(--red)">*</span>.</div>
+
+      <div class="info-box" id="sheetInfo"></div>
+
+      <div class="col-grid" id="colGrid"></div>
+
+      <div class="mt">
+        <div class="card-title" style="font-size:0.88rem; margin-bottom:8px">Preview (first 5 rows)</div>
+        <div class="preview-wrap"><table id="previewTable"></table></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
+        <button class="btn btn-primary" id="btnValidate" onclick="goValidate()">
+          Validate Data →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 3: Validate ── -->
+  <div id="panelValidate" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Data Validation
+      </div>
+      <div class="card-sub">Checking your data before generating the tool.</div>
+      <div class="validation-list" id="valList"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goStep(2)">← Back</button>
+        <button class="btn btn-primary" id="btnBuild" onclick="goBuild()">
+          Generate Tool →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 4: Build + Download ── -->
+  <div id="panelBuild" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Generating Tool
+      </div>
+      <div class="card-sub" id="buildStatus">Processing address data…</div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-label" id="progressLabel">0%</div>
+    </div>
+  </div>
+
+  <div id="panelSuccess" class="hidden">
+    <div class="success-card">
+      <div class="success-icon">✅</div>
+      <h2>Tool ready to deploy!</h2>
+      <p id="successDetail">Your updated waste collection search tool has been generated.<br>Download it and replace the existing file on your web host.</p>
+      <button class="btn btn-success" id="btnDownload" onclick="doDownload()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download waste-collection-search.html
+      </button>
+      <div class="btn-row" style="justify-content:center; margin-top:14px">
+        <button class="btn btn-outline" onclick="resetTool()">Start over with new file</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SheetJS for Excel parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+
+// ── State ─────────────────────────────────────────────────────────────────
+let workbook = null;
+let sheetData = [];       // raw rows from sheet
+let headers = [];         // column headers from row 0
+let mappings = {};        // field -> columnIndex
+let validRecords = [];    // cleaned records ready for output
+let outputHtml = null;
+
+const REQUIRED_FIELDS = ['Address', 'CollectionDay', 'PZone', 'Suburb'];
+const OPTIONAL_FIELDS = ['RoadName'];
+const ALL_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+
+// Guesses for auto-mapping column names
+const COL_HINTS = {
+  Address:       ['address','full address','fulladdress','property'],
+  CollectionDay: ['collectionday','collection day','day','weekday'],
+  PZone:         ['pzone','p zone','zone','week','collection zone'],
+  Suburb:        ['suburb','town','locality','area'],
+  RoadName:      ['roadname','road name','road','street name','streetname']
+};
+
+const VALID_DAYS  = new Set(['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY']);
+const VALID_ZONES = new Set(['Week 0','Week 1','Week 2','Week2']);
+
+// ── File handling ─────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      workbook = XLSX.read(e.target.result, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      sheetData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      headers = sheetData[0].map(h => String(h).trim());
+      document.getElementById('sheetInfo').innerHTML =
+        `<strong>File loaded:</strong> ${file.name} &nbsp;·&nbsp; Sheet: <strong>${sheetName}</strong> &nbsp;·&nbsp; ${sheetData.length - 1} rows`;
+      buildMappingUI();
+      goStep(2);
+    } catch(err) {
+      alert('Could not read file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Column mapping UI ─────────────────────────────────────────────────────
+function buildMappingUI() {
+  const grid = document.getElementById('colGrid');
+  grid.innerHTML = '';
+  mappings = {};
+
+  ALL_FIELDS.forEach(field => {
+    const isRequired = REQUIRED_FIELDS.includes(field);
+    const hints = COL_HINTS[field];
+    // Auto-guess
+    let guessIdx = headers.findIndex(h => hints.some(hint => h.toLowerCase().replace(/\s/g,'') === hint.replace(/\s/g,'')));
+    if (guessIdx === -1) guessIdx = headers.findIndex(h => hints.some(hint => h.toLowerCase().includes(hint.split(' ')[0])));
+    mappings[field] = guessIdx >= 0 ? guessIdx : -1;
+
+    const div = document.createElement('div');
+    div.className = 'col-row';
+    div.innerHTML = `
+      <div class="col-label">${field}${isRequired ? ' <span>*</span>' : ' <span style="color:var(--text-muted)">(optional)</span>'}</div>
+      <select class="col-select" id="map_${field}" onchange="onMappingChange('${field}', this.value)">
+        <option value="-1">— not mapped —</option>
+        ${headers.map((h,i) => `<option value="${i}" ${i === guessIdx ? 'selected' : ''}>${h || '(column '+(i+1)+')'}</option>`).join('')}
+      </select>`;
+    grid.appendChild(div);
+  });
+
+  updatePreview();
+  updateMappingStyles();
+}
+
+function onMappingChange(field, val) {
+  mappings[field] = parseInt(val);
+  updatePreview();
+  updateMappingStyles();
+}
+
+function updateMappingStyles() {
+  ALL_FIELDS.forEach(field => {
+    const sel = document.getElementById('map_' + field);
+    if (!sel) return;
+    const isRequired = REQUIRED_FIELDS.includes(field);
+    sel.className = 'col-select' + (mappings[field] >= 0 ? ' ok' : (isRequired ? ' err' : ''));
+  });
+}
+
+function updatePreview() {
+  const table = document.getElementById('previewTable');
+  const mappedFields = ALL_FIELDS.filter(f => mappings[f] >= 0);
+  if (!mappedFields.length) { table.innerHTML = ''; return; }
+
+  let html = '<thead><tr>' + mappedFields.map(f => `<th>${f}</th>`).join('') + '</tr></thead><tbody>';
+  for (let i = 1; i <= Math.min(5, sheetData.length - 1); i++) {
+    const row = sheetData[i];
+    html += '<tr>' + mappedFields.map(f => `<td>${String(row[mappings[f]] ?? '').slice(0,40)}</td>`).join('') + '</tr>';
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+// ── Validation ────────────────────────────────────────────────────────────
+function goValidate() {
+  const missing = REQUIRED_FIELDS.filter(f => mappings[f] < 0);
+  if (missing.length) {
+    alert('Please map these required fields: ' + missing.join(', '));
+    return;
+  }
+  buildValidation();
+  goStep(3);
+}
+
+function buildValidation() {
+  const list = document.getElementById('valList');
+  list.innerHTML = '';
+  validRecords = [];
+
+  const rows = sheetData.slice(1).filter(r => r.some(c => String(c).trim()));
+
+  let badDays = [], badZones = [], emptyAddr = [], autoFixed = 0;
+
+  const DAY_NORM = {};
+  ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'].forEach(d => {
+    DAY_NORM[d] = d; DAY_NORM[d[0]+d.slice(1).toLowerCase()] = d;
+    DAY_NORM[d.slice(0,3)] = d; DAY_NORM[d.slice(0,3).toLowerCase()] = d;
+  });
+
+  rows.forEach((row, i) => {
+    const addr    = String(row[mappings['Address']] ?? '').trim().toUpperCase();
+    const dayRaw  = String(row[mappings['CollectionDay']] ?? '').trim();
+    const zoneRaw = String(row[mappings['PZone']] ?? '').trim();
+    const suburb  = String(row[mappings['Suburb']] ?? '').trim().toUpperCase();
+    const road    = mappings['RoadName'] >= 0 ? String(row[mappings['RoadName']] ?? '').trim().toUpperCase() : '';
+
+    if (!addr) { emptyAddr.push(i + 2); return; }
+
+    // Normalise day
+    let day = (DAY_NORM[dayRaw] || DAY_NORM[dayRaw.toUpperCase()] || '').toUpperCase();
+    if (!day) { badDays.push(`Row ${i+2}: "${dayRaw}"`); return; }
+
+    // Normalise zone
+    let zone = zoneRaw;
+    if (zone === 'Week2') { zone = 'Week 2'; autoFixed++; }
+    if (!VALID_ZONES.has(zone)) { badZones.push(`Row ${i+2}: "${zoneRaw}"`); return; }
+
+    // Derive RoadName if not mapped
+    const derivedRoad = road || addr.replace(/^[\d\/\-]+[A-Z]?\s+/, '');
+
+    validRecords.push({ Address: addr, RoadName: derivedRoad, CollectionDay: day, PZone: zone, Suburb: suburb });
+  });
+
+  // ── Build result items
+  addVal(list, 'ok', `${validRecords.length.toLocaleString()} valid addresses loaded`);
+
+  if (emptyAddr.length)
+    addVal(list, 'warn', `${emptyAddr.length} rows skipped — empty address field`, `Rows: ${emptyAddr.slice(0,8).join(', ')}${emptyAddr.length > 8 ? '…' : ''}`);
+
+  if (badDays.length)
+    addVal(list, badDays.length > 5 ? 'error' : 'warn',
+      `${badDays.length} rows have unrecognised collection day values`,
+      badDays.slice(0, 5).join(' · ') + (badDays.length > 5 ? '…' : ''));
+
+  if (badZones.length)
+    addVal(list, badZones.length > 5 ? 'error' : 'warn',
+      `${badZones.length} rows have unrecognised PZone values`,
+      badZones.slice(0, 5).join(' · ') + (badZones.length > 5 ? '…' : ''));
+
+  if (autoFixed)
+    addVal(list, 'ok', `${autoFixed} minor issues auto-corrected (e.g. "Week2" → "Week 2")`);
+
+  const suburbs = [...new Set(validRecords.map(r => r.Suburb).filter(Boolean))].sort();
+  addVal(list, 'ok', `${suburbs.length} suburbs found: ${suburbs.join(', ')}`);
+
+  const days = [...new Set(validRecords.map(r => r.CollectionDay))].sort();
+  addVal(list, 'ok', `Collection days: ${days.join(', ')}`);
+
+  // Enable/disable build button
+  const hasErrors = badDays.length > 5 || badZones.length > 5 || validRecords.length < 10;
+  document.getElementById('btnBuild').disabled = hasErrors;
+  if (hasErrors) addVal(list, 'error', 'Too many errors to continue — please fix the spreadsheet and re-upload');
+}
+
+function addVal(list, type, title, detail) {
+  const icons = { ok: '✅', warn: '⚠️', error: '❌' };
+  const el = document.createElement('div');
+  el.className = 'val-item ' + type;
+  el.innerHTML = `<div class="val-icon">${icons[type]}</div><div class="val-text"><strong>${title}</strong>${detail ? '<span style="opacity:0.85"> '+detail+'</span>' : ''}</div>`;
+  list.appendChild(el);
+}
+
+// ── Build ─────────────────────────────────────────────────────────────────
+function goBuild() {
+  goStep(4);
+  setTimeout(buildOutput, 50);
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
+}
+
+async function buildOutput() {
+  setProgress(10, 'Encoding address data…');
+  await tick();
+
+  // Compact encoding
+  const day_map = {MONDAY:'M',TUESDAY:'T',WEDNESDAY:'W',THURSDAY:'H',FRIDAY:'F',SATURDAY:'S',SUNDAY:'U'};
+  const zone_map = {'Week 0':0,'Week 1':1,'Week 2':2};
+  const suburbs = [...new Set(validRecords.map(r => r.Suburb).filter(Boolean))].sort();
+  const suburb_idx = Object.fromEntries(suburbs.map((s,i) => [s,i]));
+
+  setProgress(30, 'Compressing records…');
+  await tick();
+
+  const compact_rows = validRecords.map(r => [
+    r.Address,
+    day_map[r.CollectionDay] || 'W',
+    zone_map[r.PZone] ?? 1,
+    suburb_idx[r.Suburb] ?? 0
+  ]);
+
+  const payload = JSON.stringify({ s: suburbs, d: compact_rows });
+
+  setProgress(50, 'Building HTML file…');
+  await tick();
+
+  // Fetch the base template (the current page's companion — same directory)
+  // We embed the template inline as a base64 string to keep this self-contained
+  // The template HTML is stored in TEMPLATE_HTML below
+  const html = buildHtml(payload, suburbs);
+
+  setProgress(90, 'Finalising…');
+  await tick();
+
+  outputHtml = html;
+
+  const kb = Math.round(new Blob([html]).size / 1024);
+  document.getElementById('successDetail').innerHTML =
+    `Your updated waste collection search tool has been generated.<br>
+     <strong>${validRecords.length.toLocaleString()} addresses</strong> · file size <strong>${kb} KB</strong><br><br>
+     Download it and replace the existing <code>waste-collection-search.html</code> on your web host.`;
+
+  setProgress(100, 'Done!');
+  await tick();
+
+  document.getElementById('panelBuild').classList.add('hidden');
+  document.getElementById('panelSuccess').classList.remove('hidden');
+}
+
+function tick() { return new Promise(r => setTimeout(r, 30)); }
+
+function doDownload() {
+  if (!outputHtml) return;
+  const blob = new Blob([outputHtml], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'waste-collection-search.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── Step navigation ───────────────────────────────────────────────────────
+function goStep(n) {
+  ['panelUpload','panelMapping','panelValidate','panelBuild'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('hidden', i !== n - 1);
+  });
+  if (n < 4) document.getElementById('panelSuccess').classList.add('hidden');
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById('step-ind-' + i);
+    el.className = 'step' + (i === n ? ' active' : i < n ? ' done' : '');
+  });
+}
+
+function resetTool() {
+  workbook = null; sheetData = []; headers = []; mappings = {}; validRecords = []; outputHtml = null;
+  fileInput.value = '';
+  goStep(1);
+}
+
+// ── HTML Template ─────────────────────────────────────────────────────────
+// The full app HTML with a placeholder swapped for the new data payload
+function buildHtml(dataPayload, suburbs) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waste Collection Day Search</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #00447c; --navy-mid: #005799; --blue: #00447c; --blue-light: #e0edf8;
+    --rubbish: #5b9bd5; --rubbish-light: #cce0f5; --green-waste: #6aaa5e;
+    --green-waste-light: #d4edcf; --recycling: #e8c33a; --recycling-light: #faf0c0;
+    --bg: #ffffff; --card: #ffffff; --border: #dde3ec; --text: #00447c;
+    --text-muted: #6b7d96; --radius: 10px;
+    --shadow: 0 2px 12px rgba(0,68,124,0.09); --shadow-lg: 0 6px 28px rgba(0,68,124,0.13);
+  }
+  body { font-family: -apple-system,"Calibri Light","Calibri","Helvetica Neue",Helvetica,Roboto,"Droid Sans",Arial,sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 0; }
+  .tool-wrap { max-width: 680px; margin: 0 auto; padding: 20px 20px 48px; }
+  .field-label { display: block; font-size: 0.83rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .search-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 24px 20px; border: 1px solid var(--border); margin-bottom: 20px; }
+  .search-row { display: flex; gap: 10px; }
+  .search-wrap { position: relative; flex: 1; }
+  .search-wrap .search-input { width: 100%; }
+  .search-input { flex: 1; height: 46px; padding: 0 16px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 1rem; color: var(--text); background: #fff; transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
+  .search-input::placeholder { color: #a8b4c4; }
+  .search-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,68,124,0.13); }
+  .btn-search { height: 46px; padding: 0 22px; background: var(--navy); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.1s; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+  .btn-search:hover { background: var(--navy-mid); }
+  .btn-search:active { transform: scale(0.98); }
+  .search-hint { margin-top: 9px; font-size: 0.82rem; color: var(--text-muted); }
+  .results-section { margin-top: 4px; }
+  .results-meta { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 10px; padding: 0 2px; }
+  .results-meta strong { color: var(--navy); font-weight: 600; }
+  .address-select { width: 100%; height: 46px; padding: 0 16px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.95rem; color: var(--text); background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7d96' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 14px center; -webkit-appearance: none; appearance: none; cursor: pointer; transition: border-color 0.15s; outline: none; }
+  .address-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,68,124,0.13); }
+  .no-results { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; color: var(--text-muted); font-size: 0.93rem; text-align: center; margin-top: 8px; }
+  .calendar-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); border: 1px solid var(--border); margin-top: 20px; overflow: hidden; animation: slideUp 0.22s ease; }
+  @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .cal-address-bar { background: var(--navy); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 10px; font-size: 0.92rem; font-weight: 500; }
+  .cal-address-bar svg { opacity: 0.7; flex-shrink: 0; }
+  .cal-address-bar .addr-text { font-weight: 600; }
+  .cal-address-bar .addr-suburb { opacity: 0.7; font-weight: 400; margin-left: 4px; }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+  .cal-nav-btn { width: 34px; height: 34px; border: 1.5px solid var(--border); border-radius: 7px; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s, border-color 0.12s; color: var(--navy); }
+  .cal-nav-btn:hover { background: var(--blue-light); border-color: var(--blue); }
+  .cal-month-label { font-size: 1.05rem; font-weight: 600; color: var(--navy); }
+  .cal-grid { padding: 8px 16px 16px; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+  .cal-wday { text-align: center; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); padding: 4px 0; }
+  .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-day { aspect-ratio: 1; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); position: relative; cursor: default; transition: transform 0.1s; min-height: 44px; gap: 3px; }
+  .cal-day.empty { background: transparent; }
+  .cal-day.today { outline: 2px solid var(--navy); outline-offset: -2px; color: var(--navy); font-weight: 700; }
+  .cal-day.collection { cursor: pointer; }
+  .cal-day.collection:hover { transform: scale(1.06); z-index: 1; }
+  .cal-day .day-num { line-height: 1; z-index: 1; }
+  .cal-day.rubbish-green { background: linear-gradient(135deg, var(--rubbish-light) 50%, var(--green-waste-light) 50%); color: var(--navy); }
+  .cal-day.rubbish-recycling { background: linear-gradient(135deg, var(--rubbish-light) 50%, var(--recycling-light) 50%); color: var(--navy); }
+  .cal-day.rubbish-only { background: var(--rubbish-light); color: var(--navy); }
+  .day-dots { display: flex; gap: 3px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-rubbish { background: var(--rubbish); }
+  .dot-green { background: var(--green-waste); }
+  .dot-recycle { background: var(--recycling); }
+  .legend { display: flex; align-items: center; gap: 18px; padding: 12px 20px 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.83rem; color: var(--text-muted); font-weight: 500; }
+  .legend-swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+  .swatch-rubbish { background: var(--rubbish); }
+  .swatch-green { background: var(--green-waste); }
+  .swatch-recycle { background: var(--recycling); }
+  .collection-summary { padding: 0 20px 18px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .summary-title { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding-top: 14px; margin-bottom: 10px; }
+  .summary-dates { display: flex; flex-direction: column; gap: 7px; }
+  .summary-row { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; }
+  .summary-date { font-weight: 500; color: var(--navy); min-width: 115px; }
+  .summary-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { padding: 2px 9px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+  .pill-rubbish { background: var(--rubbish-light); color: #2c5f90; }
+  .pill-green { background: var(--green-waste-light); color: #2e6a25; }
+  .pill-recycle { background: var(--recycling-light); color: #7a6010; }
+  .tooltip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; font-size: 0.75rem; padding: 5px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; font-family: inherit; }
+  .cal-day:hover .tooltip { opacity: 1; }
+  .tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--navy); }
+  .ac-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid var(--blue); border-radius: 8px; box-shadow: var(--shadow-lg); z-index: 100; max-height: 300px; overflow-y: auto; display: none; }
+  .ac-dropdown.open { display: block; }
+  .ac-section-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); padding: 8px 14px 4px; background: #f7f9fc; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+  .ac-section-label:not(:first-child) { border-top: 1px solid var(--border); }
+  .ac-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 0.92rem; color: var(--text); border-bottom: 1px solid #f0f3f8; transition: background 0.1s; }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item:hover, .ac-item.active { background: var(--blue-light); }
+  .ac-item svg { flex-shrink: 0; opacity: 0.45; }
+  .ac-item-text { flex: 1; min-width: 0; }
+  .ac-item-main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ac-item-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+  .ac-highlight { font-weight: 700; color: var(--navy); }
+  .ac-no-results { padding: 14px; font-size: 0.88rem; color: var(--text-muted); text-align: center; }
+  @media (max-width: 480px) {
+    .tool-wrap { padding: 16px 12px 36px; }
+    .search-row { flex-direction: column; }
+    .btn-search { height: 44px; }
+    .cal-day { min-height: 38px; font-size: 0.82rem; }
+    .legend { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="tool-wrap">
+  <div class="search-card">
+    <label class="field-label" for="streetInput">Enter street name or address</label>
+    <div class="search-row">
+      <div class="search-wrap">
+        <input type="text" id="streetInput" class="search-input"
+               placeholder="e.g. Alexander Avenue or 14 Alexander Avenue"
+               autocomplete="off" spellcheck="false">
+        <div class="ac-dropdown" id="acDropdown"></div>
+      </div>
+      <button class="btn-search" onclick="doSearch()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search
+      </button>
+    </div>
+    <p class="search-hint">Do not include the city name.</p>
+  </div>
+  <div class="results-section" id="resultsSection" style="display:none">
+    <p class="results-meta" id="resultsMeta"></p>
+    <select class="address-select" id="addressSelect" onchange="onAddressSelect()">
+      <option value="">— Select your address —</option>
+    </select>
+    <div id="noResults" class="no-results" style="display:none">No addresses found. Try a shorter search term or check the spelling.</div>
+  </div>
+  <div id="calendarCard" class="calendar-card" style="display:none">
+    <div class="cal-address-bar" id="calAddressBar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span></span>
+    </div>
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="changeMonth(-1)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="cal-month-label" id="calMonthLabel"></span>
+      <button class="cal-nav-btn" onclick="changeMonth(1)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <div class="cal-grid">
+      <div class="cal-weekdays">
+        <div class="cal-wday">Sun</div><div class="cal-wday">Mon</div>
+        <div class="cal-wday">Tue</div><div class="cal-wday">Wed</div>
+        <div class="cal-wday">Thu</div><div class="cal-wday">Fri</div>
+        <div class="cal-wday">Sat</div>
+      </div>
+      <div class="cal-days" id="calDays"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch swatch-rubbish"></div>Rubbish</div>
+      <div class="legend-item"><div class="legend-swatch swatch-green"></div>Green Waste</div>
+      <div class="legend-item"><div class="legend-swatch swatch-recycle"></div>Recycling</div>
+    </div>
+    <div class="collection-summary" id="collectionSummary"></div>
+  </div>
+</div>
+<script>
+const RAW = ${dataPayload};
+const SUBURBS = RAW.s;
+const ADDRESSES = RAW.d.map(r => ({
+  Address:       r[0],
+  RoadName:      r[0].replace(/^[\\d\\/\\-]+[A-Z]?\\s+/, ''),
+  CollectionDay: {M:'MONDAY',T:'TUESDAY',W:'WEDNESDAY',H:'THURSDAY',F:'FRIDAY'}[r[1]] || r[1],
+  PZone:         ['Week 0','Week 1','Week 2'][r[2]] || 'Week 1',
+  Suburb:        SUBURBS[r[3]] || ''
+}));
+
+const DAY_IDX = {SUNDAY:0,MONDAY:1,TUESDAY:2,WEDNESDAY:3,THURSDAY:4,FRIDAY:5,SATURDAY:6};
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const ANCHOR_WEEK1 = Date.UTC(2013,9,27,12,0,0);
+const ANCHOR_WEEK2 = Date.UTC(2013,9,20,12,0,0);
+const MS_PER_DAY = 86400000;
+
+let currentRecord = null, calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+
+function doSearch() {
+  const q = document.getElementById('streetInput').value.trim().toUpperCase();
+  if (!q) return;
+  const matches = ADDRESSES.filter(a => a.Address.replace(/\\s+/g,' ').includes(q) || a.RoadName.replace(/\\s+/g,' ').includes(q));
+  const sec = document.getElementById('resultsSection');
+  const sel = document.getElementById('addressSelect');
+  const noRes = document.getElementById('noResults');
+  const meta = document.getElementById('resultsMeta');
+  sec.style.display = 'block';
+  if (!matches.length) { sel.style.display='none'; noRes.style.display='block'; meta.innerHTML=''; document.getElementById('calendarCard').style.display='none'; return; }
+  noRes.style.display='none'; sel.style.display='block';
+  meta.innerHTML = '<strong>'+matches.length+'</strong> address'+(matches.length!==1?'es':'')+' found for "<strong>'+q+'</strong>"';
+  sel.innerHTML = '<option value="">— Select your address —</option>';
+  matches.forEach((rec,i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = rec.Address+(rec.Suburb?', '+rec.Suburb:'');
+    opt.dataset.idx = ADDRESSES.indexOf(rec); sel.appendChild(opt);
+  });
+  if (matches.length===1) { sel.selectedIndex=1; onAddressSelect(); } else { document.getElementById('calendarCard').style.display='none'; }
+}
+
+function onAddressSelect() {
+  const sel = document.getElementById('addressSelect');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt||!opt.dataset.idx) { document.getElementById('calendarCard').style.display='none'; return; }
+  currentRecord = ADDRESSES[+opt.dataset.idx];
+  calYear = new Date().getFullYear(); calMonth = new Date().getMonth();
+  renderCalendar();
+}
+
+function getCollectionType(date, record) {
+  const dayIdx = DAY_IDX[record.CollectionDay];
+  if (date.getDay()!==dayIdx) return null;
+  const isRural = record.Suburb==='RURAL', isWeek0 = record.PZone==='Week 0';
+  const anchor = record.PZone==='Week 2' ? ANCHOR_WEEK2 : ANCHOR_WEEK1;
+  const dateUtcNoon = Date.UTC(date.getFullYear(),date.getMonth(),date.getDate(),12,0,0);
+  const dayDiff = Math.round((dateUtcNoon-anchor)/MS_PER_DAY);
+  const cycle = ((dayDiff%14)+14)%14;
+  const isCycleA = cycle<7;
+  if (isWeek0) return 'rubbish-only';
+  if (isRural) return isCycleA ? 'rubbish-only' : 'rubbish-recycling';
+  return isCycleA ? 'rubbish-green' : 'rubbish-recycling';
+}
+
+function typeLabel(type) {
+  if (type==='rubbish-green') return ['Rubbish','Green Waste'];
+  if (type==='rubbish-recycling') return ['Rubbish','Recycling'];
+  if (type==='rubbish-only') return ['Rubbish'];
+  return [];
+}
+
+function changeMonth(dir) {
+  calMonth+=dir;
+  if (calMonth<0){calMonth=11;calYear--;} if (calMonth>11){calMonth=0;calYear++;}
+  renderCalendar();
+}
+
+function renderCalendar() {
+  if (!currentRecord) return;
+  const rec = currentRecord, today = new Date(); today.setHours(0,0,0,0);
+  document.getElementById('calAddressBar').querySelector('span').innerHTML = '<span class="addr-text">'+rec.Address+'</span><span class="addr-suburb">'+rec.Suburb+'</span>';
+  document.getElementById('calMonthLabel').textContent = MONTH_NAMES[calMonth]+' '+calYear;
+  const firstDay = new Date(calYear,calMonth,1).getDay();
+  const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
+  const grid = document.getElementById('calDays'); grid.innerHTML='';
+  const collectionDates=[];
+  for (let i=0;i<firstDay;i++){const el=document.createElement('div');el.className='cal-day empty';grid.appendChild(el);}
+  for (let d=1;d<=daysInMonth;d++) {
+    const date=new Date(calYear,calMonth,d), type=getCollectionType(date,rec), isToday=date.getTime()===today.getTime();
+    const el=document.createElement('div');
+    el.className='cal-day'+(type?' collection '+type:'')+(isToday?' today':'');
+    const numEl=document.createElement('span');numEl.className='day-num';numEl.textContent=d;el.appendChild(numEl);
+    if (type) {
+      const labels=typeLabel(type), dots=document.createElement('div');
+      dots.className='day-dots';
+      dots.innerHTML='<div class="dot dot-rubbish"></div>';
+      if (type==='rubbish-green') dots.innerHTML+='<div class="dot dot-green"></div>';
+      if (type==='rubbish-recycling') dots.innerHTML+='<div class="dot dot-recycle"></div>';
+      el.appendChild(dots);
+      const tip=document.createElement('div');tip.className='tooltip';tip.textContent=labels.join(' + ');el.appendChild(tip);
+      collectionDates.push({date,type,labels});
+    }
+    grid.appendChild(el);
+  }
+  document.getElementById('calendarCard').style.display='block';
+  renderSummary(collectionDates);
+}
+
+function renderSummary(dates) {
+  const el=document.getElementById('collectionSummary');
+  if (!dates.length){el.innerHTML='';return;}
+  const today=new Date();today.setHours(0,0,0,0);
+  const upcoming=dates.filter(d=>d.date>=today).slice(0,4);
+  if (!upcoming.length){el.innerHTML='';return;}
+  const dw=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const fmt=d=>dw[d.date.getDay()]+' '+d.date.getDate()+' '+MONTH_NAMES[d.date.getMonth()];
+  let html='<div class="summary-title">Upcoming collections this month</div><div class="summary-dates">';
+  for (const d of upcoming){
+    const pills=d.labels.map(l=>{const cls=l==='Rubbish'?'pill-rubbish':l==='Green Waste'?'pill-green':'pill-recycle';return '<span class="pill '+cls+'">'+l+'</span>';}).join('');
+    html+='<div class="summary-row"><span class="summary-date">'+fmt(d)+'</span><div class="summary-pills">'+pills+'</div></div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+// ── Autocomplete
+const ROAD_INDEX=[];
+const roadMap={};
+for (const rec of ADDRESSES){
+  const road=rec.RoadName?rec.RoadName.trim():'';
+  if (!road) continue;
+  if (!roadMap[road]){roadMap[road]={road,suburbs:new Set(),count:0};ROAD_INDEX.push(roadMap[road]);}
+  roadMap[road].count++;
+  if (rec.Suburb) roadMap[road].suburbs.add(rec.Suburb.trim());
+}
+ROAD_INDEX.sort((a,b)=>a.road.localeCompare(b.road));
+
+let acActiveIdx=-1, acItems=[], acLastQ='';
+const inputEl=document.getElementById('streetInput'), dropdown=document.getElementById('acDropdown');
+
+inputEl.addEventListener('input',()=>{
+  const q=inputEl.value.trim();
+  if (q.length<2){closeDropdown();return;}
+  const qu=q.toUpperCase();
+  if (qu===acLastQ) return;
+  acLastQ=qu; showSuggestions(qu);
+});
+inputEl.addEventListener('keydown',e=>{
+  if (e.key==='Enter'){closeDropdown();doSearch();return;}
+  if (!dropdown.classList.contains('open')) return;
+  if (e.key==='ArrowDown'){e.preventDefault();setActive(Math.min(acActiveIdx+1,acItems.length-1));}
+  else if (e.key==='ArrowUp'){e.preventDefault();setActive(Math.max(acActiveIdx-1,0));}
+  else if (e.key==='Escape'){closeDropdown();}
+});
+document.addEventListener('click',e=>{if (!e.target.closest('.search-wrap')) closeDropdown();});
+
+function setActive(idx){acActiveIdx=idx;acItems.forEach((el,i)=>el.classList.toggle('active',i===idx));if(acItems[idx])acItems[idx].scrollIntoView({block:'nearest'});}
+function closeDropdown(){dropdown.classList.remove('open');acActiveIdx=-1;acItems=[];}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function highlight(text,q){const idx=text.toUpperCase().indexOf(q);if(idx===-1)return escHtml(text);return escHtml(text.slice(0,idx))+'<span class="ac-highlight">'+escHtml(text.slice(idx,idx+q.length))+'</span>'+escHtml(text.slice(idx+q.length));}
+
+const roadIcon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-10"/></svg>';
+const addrIcon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+function showSuggestions(q){
+  const matchedRoads=ROAD_INDEX.filter(r=>r.road.toUpperCase().includes(q)).slice(0,5);
+  const hasNum=/\\d/.test(q);
+  const matchedAddrs=hasNum?ADDRESSES.filter(a=>a.Address.replace(/\\s+/g,' ').toUpperCase().includes(q)).slice(0,8):[];
+  if (!matchedRoads.length&&!matchedAddrs.length){dropdown.innerHTML='<div class="ac-no-results">No matching addresses found</div>';dropdown.classList.add('open');acItems=[];return;}
+  let html='';
+  if (matchedRoads.length){
+    html+='<div class="ac-section-label">Streets</div>';
+    matchedRoads.forEach(r=>{const suburbs=[...r.suburbs].filter(Boolean).join(', ');html+='<div class="ac-item" data-type="road" data-val="'+escHtml(r.road)+'">'+roadIcon+'<div class="ac-item-text"><div class="ac-item-main">'+highlight(r.road,q)+'</div>'+(suburbs?'<div class="ac-item-sub">'+escHtml(suburbs)+'</div>':'')+'</div></div>';});
+  }
+  if (matchedAddrs.length){
+    html+='<div class="ac-section-label">Addresses</div>';
+    matchedAddrs.forEach(a=>{html+='<div class="ac-item" data-type="addr" data-val="'+escHtml(a.Address)+'">'+addrIcon+'<div class="ac-item-text"><div class="ac-item-main">'+highlight(a.Address,q)+'</div>'+(a.Suburb?'<div class="ac-item-sub">'+escHtml(a.Suburb)+'</div>':'')+'</div></div>';});
+  }
+  dropdown.innerHTML=html;dropdown.classList.add('open');acActiveIdx=-1;
+  acItems=[...dropdown.querySelectorAll('.ac-item')];
+  acItems.forEach(el=>{el.addEventListener('mousedown',e=>{e.preventDefault();inputEl.value=el.dataset.val;closeDropdown();doSearch();});});
+}
+<\/script>
+</body>
+</html>`;
+}
+
+</script>
+</body>
+</html>
