@@ -672,16 +672,7 @@ function buildHtml(dataPayload, suburbs) {
   .swatch-rubbish { background: var(--rubbish); }
   .swatch-green { background: var(--green-waste); }
   .swatch-recycle { background: var(--recycling); }
-  .collection-summary { padding: 0 20px 18px; border-top: 1px solid var(--border); margin-top: 4px; }
-  .summary-title { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding-top: 14px; margin-bottom: 10px; }
-  .summary-dates { display: flex; flex-direction: column; gap: 7px; }
-  .summary-row { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; }
-  .summary-date { font-weight: 500; color: var(--navy); min-width: 115px; }
-  .summary-pills { display: flex; gap: 6px; flex-wrap: wrap; }
-  .pill { padding: 2px 9px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
-  .pill-rubbish { background: var(--rubbish-light); color: #2c5f90; }
-  .pill-green { background: var(--green-waste-light); color: #2e6a25; }
-  .pill-recycle { background: var(--recycling-light); color: #7a6010; }
+
   .tooltip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; font-size: 0.75rem; padding: 5px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; font-family: inherit; }
   .cal-day:hover .tooltip { opacity: 1; }
   .tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--navy); }
@@ -760,7 +751,6 @@ function buildHtml(dataPayload, suburbs) {
       <div class="legend-item"><div class="legend-swatch swatch-green"></div>Green Waste</div>
       <div class="legend-item"><div class="legend-swatch swatch-recycle"></div>Recycling</div>
     </div>
-    <div class="collection-summary" id="collectionSummary"></div>
   </div>
 </div>
 <script>
@@ -847,7 +837,6 @@ function renderCalendar() {
   const firstDay = new Date(calYear,calMonth,1).getDay();
   const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
   const grid = document.getElementById('calDays'); grid.innerHTML='';
-  const collectionDates=[];
   for (let i=0;i<firstDay;i++){const el=document.createElement('div');el.className='cal-day empty';grid.appendChild(el);}
   for (let d=1;d<=daysInMonth;d++) {
     const date=new Date(calYear,calMonth,d), type=getCollectionType(date,rec), isToday=date.getTime()===today.getTime();
@@ -862,29 +851,10 @@ function renderCalendar() {
       if (type==='rubbish-recycling') dots.innerHTML+='<div class="dot dot-recycle"></div>';
       el.appendChild(dots);
       const tip=document.createElement('div');tip.className='tooltip';tip.textContent=labels.join(' + ');el.appendChild(tip);
-      collectionDates.push({date,type,labels});
     }
     grid.appendChild(el);
   }
   document.getElementById('calendarCard').style.display='block';
-  renderSummary(collectionDates);
-}
-
-function renderSummary(dates) {
-  const el=document.getElementById('collectionSummary');
-  if (!dates.length){el.innerHTML='';return;}
-  const today=new Date();today.setHours(0,0,0,0);
-  const upcoming=dates.filter(d=>d.date>=today).slice(0,4);
-  if (!upcoming.length){el.innerHTML='';return;}
-  const dw=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const fmt=d=>dw[d.date.getDay()]+' '+d.date.getDate()+' '+MONTH_NAMES[d.date.getMonth()];
-  let html='<div class="summary-title">Upcoming collections this month</div><div class="summary-dates">';
-  for (const d of upcoming){
-    const pills=d.labels.map(l=>{const cls=l==='Rubbish'?'pill-rubbish':l==='Green Waste'?'pill-green':'pill-recycle';return '<span class="pill '+cls+'">'+l+'</span>';}).join('');
-    html+='<div class="summary-row"><span class="summary-date">'+fmt(d)+'</span><div class="summary-pills">'+pills+'</div></div>';
-  }
-  html+='</div>';
-  el.innerHTML=html;
 }
 
 // ── Autocomplete
